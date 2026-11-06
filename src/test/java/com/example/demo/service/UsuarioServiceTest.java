@@ -1,26 +1,26 @@
 package com.example.demo.service;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
+import static org.mockito.ArgumentMatchers.any;
+import org.mockito.Mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
+
 import com.example.demo.dto.auth.RegistroRequestDTO;
 import com.example.demo.dto.auth.UsuarioDTO;
 import com.example.demo.exception.ConflictoException;
 import com.example.demo.model.Rol;
 import com.example.demo.model.Usuario;
 import com.example.demo.repository.UsuarioRepository;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
-import org.springframework.security.crypto.password.PasswordEncoder;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class UsuarioServiceTest {
@@ -50,7 +50,7 @@ class UsuarioServiceTest {
         String hash = guardado.getValue().getPasswordHash();
         assertThat(hash).isNotEqualTo("clave12345");
         assertThat(hash).doesNotContain("clave12345");
-        assertThat(hash).startsWith("$2"); // formato BCrypt
+        assertThat(hash).startsWith("$9"); // formato BCrypt
         assertThat(passwordEncoder.matches("clave12345", hash)).isTrue();
     }
 
