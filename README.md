@@ -316,7 +316,7 @@ El workflow [`.github/workflows/ci.yml`](./.github/workflows/ci.yml) corre en ca
 
 ## Despliegue en Render
 
-URL pública: https://<tu-servicio>.onrender.com (por ejemplo `https://<tu-servicio>.onrender.com/health`). Es una instancia gratuita: se duerme tras 15 minutos sin tráfico y la primera petición después tarda cerca de un minuto en responder.
+URL pública: https://tp2web2.onrender.com (por ejemplo `https://tp2web2.onrender.com/health`). Es una instancia gratuita: se duerme tras 15 minutos sin tráfico y la primera petición después tarda cerca de un minuto en responder.
 
 **Archivos que lo hacen posible.** Render no ejecuta Java directamente, así que se despliega con un `Dockerfile` de dos etapas (compila con `./mvnw package` en una imagen JDK 25 y ejecuta el jar en una imagen JRE 25, con un heap limitado a la memoria de la instancia gratuita). `server.port=${PORT:8080}` en `application.properties` hace que la app escuche en el puerto que Render le indica; en local sigue siendo 8080.
 
@@ -334,7 +334,7 @@ URL pública: https://<tu-servicio>.onrender.com (por ejemplo `https://<tu-servi
 **Cómo se verificó:**
 
 - En **Logs** del servicio: `Successfully applied 6 migrations to schema "public", now at version v6` (las migraciones corrieron en la base remota), `Started DemoApplication` y ninguna línea `ERROR`. El estado del servicio pasa a **Live**.
-- `GET https://<tu-servicio>.onrender.com/health` responde `{"status":"ok","service":"demo"}`.
+- `GET https://tp2web2.onrender.com/health` responde `{"status":"ok","service":"demo"}`.
 - Registro y login contra la URL pública, `GET /api/listas` con el token → `200` y sin token → `401`.
 
 **Problema que apareció:** el primer despliegue falló con `UnknownHostException` porque `DB_HOST` quedó con un texto de ejemplo en vez del hostname real. Los errores de conexión a la base se ven en los logs justo antes de que Flyway intente migrar.
