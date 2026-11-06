@@ -1,0 +1,89 @@
+@base = http://localhost:8080
+@email = manu@example.com
+@password = clave12345
+
+### ---------- AUTENTICACION ----------
+
+### Éxito: registrar usuario (201; 409 si ya existe)
+POST {{base}}/api/auth/registro
+Content-Type: application/json
+
+{ "email": "{{email}}", "password": "{{password}}" }
+
+### Error: email repetido (409)
+POST {{base}}/api/auth/registro
+Content-Type: application/json
+
+{ "email": "{{email}}", "password": "{{password}}" }
+
+### Error: email inválido y contraseña corta (400)
+POST {{base}}/api/auth/registro
+Content-Type: application/json
+
+{ "email": "no-es-un-email", "password": "123" }
+
+### Éxito: login (200, devuelve el token)
+# @name login
+POST {{base}}/api/auth/login
+Content-Type: application/json
+
+{ "email": "{{email}}", "password": "{{password}}" }
+
+### Error: contraseña incorrecta (401)
+POST {{base}}/api/auth/login
+Content-Type: application/json
+
+{ "email": "{{email}}", "password": "incorrecta1" }
+
+### ---------- PROTECCION ----------
+
+### Error: sin token (401)
+GET {{base}}/api/listas
+
+### Error: token inválido (401)
+GET {{base}}/api/listas
+Authorization: Bearer esto.no.es.un.jwt
+
+### Éxito: público, sin token (200)
+GET {{base}}/api/productos
+
+### ---------- LISTAS DEL USUARIO ----------
+
+### Éxito: crear lista (201); el dueño es el usuario del token
+# @name crearLista
+POST {{base}}/api/listas
+Authorization: Bearer {{login.response.body.token}}
+Content-Type: application/json
+
+{ "nombre": "Regalos" }
+
+### Éxito: listar mis listas (200)
+GET {{base}}/api/listas
+Authorization: Bearer {{login.response.body.token}}
+
+### Éxito: obtener mi lista (200)
+GET {{base}}/api/listas/{{crearLista.response.body.id}}
+Authorization: Bearer {{login.response.body.token}}
+
+### Error: lista inexistente (404)
+GET {{base}}/api/listas/999999
+Authorization: Bearer {{login.response.body.token}}
+
+### ---------- LISTA AJENA (otro usuario) ----------
+
+### Registrar al segundo usuario (201)
+POST {{base}}/api/auth/registro
+Content-Type: application/json
+
+{ "email": "beto@example.com", "password": "clave12345" }
+
+### Login del segundo usuario (200)
+# @name loginBeto
+POST {{base}}/api/auth/login
+Content-Type: application/json
+
+{ "email": "beto@example.com", "password": "clave12345" }
+
+### Error: Beto pide la lista de Manu (403)
+GET {{base}}/api/listas/{{crearLista.response.body.id}}
+Authorization: Bearer {{loginBeto.response.body.token}}

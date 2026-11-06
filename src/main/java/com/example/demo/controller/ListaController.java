@@ -9,6 +9,7 @@ import com.example.demo.security.UsuarioAutenticado;
 import com.example.demo.service.ListaService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -30,7 +31,8 @@ import java.util.List;
  */
 @RestController
 @RequestMapping("/api/listas")
-@Tag(name = "Listas", description = "Listas para organizar favoritos (por ejemplo \"Regalos\"). Requieren token; cada lista pertenece a su creador.")
+@Tag(name = "Listas", description = "Listas para organizar favoritos (por ejemplo \"Regalos\"). Requiere autenticación (token JWT): cada lista pertenece a su creador y solo la opera él, salvo que el usuario sea ADMIN.")
+@SecurityRequirement(name = "bearerAuth")
 public class ListaController {
 
     private final ListaService listaService;

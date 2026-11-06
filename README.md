@@ -1,5 +1,9 @@
 # TP2 · Persistencia, migraciones y arquitectura hexagonal
 
+![CI](https://github.com/manuel7997/tp2web2/actions/workflows/ci.yml/badge.svg)
+
+Este repositorio continúa en el **TP3** (seguridad con JWT, pruebas, integración continua y despliegue). Las secciones nuevas son **Seguridad (TP3)**, **Migraciones del TP3**, **Probar los endpoints protegidos**, **Tests**, **Integración continua (CI)** y **Despliegue en Render**.
+
 Evolución del TP1: la API de catálogo y favoritos ahora persiste en
 PostgreSQL con Spring Data JPA/Hibernate, versiona el esquema con Flyway y
 suma un recurso nuevo (listas) relacionado con favoritos.
@@ -46,20 +50,19 @@ Usar siempre el wrapper, nunca un `mvn` instalado aparte:
 Cuando el log muestre `Started DemoApplication`, la app queda escuchando en
 `http://localhost:8080`.
 
-Los tests (`./mvnw test`) arrancan el contexto completo de Spring, así que
-también necesitan la base levantada.
+Para correr los tests (unitarios y de integración) ver la sección **Tests**: ya no necesitan esta base, las de integración levantan la suya con Testcontainers.
 
 ### 3. Confirmar que las migraciones corrieron
 
 En el log de arranque aparecen líneas de Flyway del estilo
 `Migrating schema "public" to version "1 - create favoritos"` (hasta la
-versión 4). Para verificarlo en la base:
+versión 6). Para verificarlo en la base:
 
 ```
 SELECT version, description, success FROM flyway_schema_history;"
 ```
 
-Deben verse cuatro filas (V1 a V4) con `success = t`. Flyway crea esa
+Deben verse seis filas (V1 a V6) con `success = t`. Flyway crea esa
 tabla sola.
 
 ## Documentación / Swagger UI
@@ -68,7 +71,7 @@ tabla sola.
 http://localhost:8080/swagger-ui.html
 ```
 
-Muestra los tres grupos (**Productos**, **Favoritos** y **Listas**), cada
+Muestra los cuatro grupos (**Autenticación**, **Productos**, **Favoritos** y **Listas**), cada
 endpoint con su `@Operation`. En [`requests/tp2.http`](./requests/tp2.http)
 hay una colección con casos de éxito y de error (para la extensión REST
 Client de VS Code o IntelliJ).
@@ -79,6 +82,8 @@ Client de VS Code o IntelliJ).
 |---|---|---|---|---|
 | Salud | GET | `/health` | Chequeo de salud básico | 200 |
 | Salud | GET | `/ping` | Devuelve `pong`, sin JSON | 200 |
+| Autenticación | POST | `/api/auth/registro` | Registra un usuario (rol `USER`, contraseña hasheada con BCrypt) | 201 / 400 / 409 |
+| Autenticación | POST | `/api/auth/login` | Devuelve un JWT con el id y el rol del usuario | 200 / 400 / 401 |
 | Productos | GET | `/api/productos` | Lista el catálogo (consumido de DummyJSON) | 200 |
 | Productos | GET | `/api/productos/{id}` | Un producto; 404 si no existe | 200 / 404 |
 | Favoritos | POST | `/api/favoritos` | Crea un favorito en una lista; 404 si la lista no existe | 201 / 404 |
@@ -93,19 +98,42 @@ Client de VS Code o IntelliJ).
 | Listas | DELETE | `/api/listas/{id}` | Elimina una lista vacía; 409 si tiene favoritos | 204 / 404 / 409 |
 | Listas | POST | `/api/listas/{origenId}/mover-favoritos` | Mueve todos los favoritos a otra lista y elimina la origen (transaccional) | 200 / 404 / 400 |
 
-Ejemplos con curl:
+Son públicos `/health`, `/ping`, `/api/productos/**` y `/api/auth/**`. Todo lo
+demás (`/api/favoritos/**` y `/api/listas/**`) exige un token JWT: sin token, o
+con uno inválido o vencido, responde `401`. Sobre las listas rige además la
+propiedad: operar una lista de otro usuario responde `403` (salvo que el
+usuario sea `ADMIN`), y las listas inexistentes siguen dando `404`.
+
+Ejemplos con curl (en bash; los de favoritos y listas llevan el token del login):
+
+```
+curl -X POST http://localhost:8080/api/auth/registro \
+  -H "Content-Type: application/json" \
+  -d '{"email":"manu@example.com","password":"clave12345"}'
+
+TOKEN=$(curl -s -X POST http://localhost:8080/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"manu@example.com","password":"clave12345"}' \
+  | sed -E 's/.*"token":"([^"]+)".*/\1/')
+```
+
+Con el token en `$TOKEN`:
 
 ```
 curl -X POST http://localhost:8080/api/listas \
+  -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" -d '{"nombre":"Regalos"}'
 
 curl -X POST http://localhost:8080/api/favoritos \
+  -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"productoId":1,"nombreProducto":"Essence Mascara Lash Princess","comentario":"me gustan","listaId":1}'
 
-curl http://localhost:8080/api/listas/1/favoritos
+curl http://localhost:8080/api/listas/1/favoritos \
+  -H "Authorization: Bearer $TOKEN"
 
 curl -X POST http://localhost:8080/api/listas/1/mover-favoritos \
+  -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" -d '{"listaDestinoId":2}'
 ```
 
@@ -233,3 +261,92 @@ Por qué ahí y no en otro lado:
 - Al ser Java común, se prueba con tests unitarios sin levantar Spring: lista ajena lanza `AccesoDenegadoException` y `ADMIN` pasa.
 
 El servicio recibe el usuario autenticado como parámetro (el controller lo toma del contexto de seguridad con `@AuthenticationPrincipal`), así no depende de estado global. Responder `403` y no `404` ante una lista ajena distingue "no existe" de "no es tuya", con el costo de que confirma que el id existe.
+
+## Migraciones del TP3 (V5, V6) y el ajuste de V4
+
+- `V5__create_usuarios.sql`: tabla `usuarios` (`id`, `email` único, `password_hash`, `rol` con un `CHECK` que admite `USER` o `ADMIN`).
+- `V6__add_usuario_id_a_listas.sql`: agrega `listas.usuario_id` (clave foránea a `usuarios`, `NOT NULL`). Las listas que ya existían pasan al primer usuario registrado y recién después se exige `NOT NULL`.
+
+**Ajuste de V4.** Esta migración se modificó después de aplicada en desarrollo: originalmente creaba siempre la lista "Sin clasificar", incluso en una base vacía. Al sumar `V6` (cada lista necesita dueño), una base nueva quedaba con esa lista y sin ningún usuario al que asignársela, y la migración fallaba. Lo detectaron las pruebas de integración, que parten de una base limpia. Ahora `V4` solo crea la lista si hay favoritos sin lista. Es una excepción a la regla de no editar migraciones ya aplicadas (ver "Evolución del esquema"): es seguro en bases nuevas (pruebas, CI, despliegue), pero una base que ya había corrido la `V4` original se niega a arrancar por checksum distinto, y hay que repararla (actualizando el checksum en `flyway_schema_history`) o recrearla.
+
+## Probar los endpoints protegidos
+
+**En Swagger UI** (`/swagger-ui.html`):
+
+1. `POST /api/auth/registro` con un email y una contraseña de 8 a 72 caracteres.
+2. `POST /api/auth/login` con las mismas credenciales y copiar el valor de `token`.
+3. Botón **Authorize** (arriba a la derecha), pegar el token sin la palabra `Bearer`. Los candados de **Favoritos** y **Listas** quedan activos.
+
+**Con la colección** [`requests/tp3.http`](./requests/tp3.http) (extensión REST Client): registro, login, `401` sin token o con token inválido, creación de una lista, `404` y `403` al pedir la lista de otro usuario.
+
+Los usuarios siempre se registran con rol `USER`. Para probar `ADMIN` se cambia el rol en la base (`UPDATE usuarios SET rol = 'ADMIN' WHERE email = '...';`) y se vuelve a iniciar sesión, porque el rol viaja dentro del token.
+
+## Tests
+
+```
+# Windows
+.\mvnw.cmd test       # solo las pruebas unitarias
+.\mvnw.cmd verify     # unitarias + integración
+
+# macOS/Linux
+./mvnw test
+./mvnw verify
+```
+
+El sufijo del nombre decide qué plugin de Maven ejecuta cada clase:
+
+- **`*Test` (Surefire, `mvn test`)**: pruebas unitarias con Mockito, sin Spring ni base de datos. `ListaServiceTest` (la lista creada queda asociada al usuario autenticado, lista ajena → `AccesoDenegadoException`, `ADMIN` pasa, `404` antes que `403`, mover o eliminar una lista ajena no modifica nada) y `UsuarioServiceTest` (nunca se guarda la contraseña en texto plano: se guarda un hash BCrypt; rol `USER` por defecto; email repetido → conflicto).
+- **`*IT` (Failsafe, `mvn verify`)**: pruebas de integración. Arrancan la aplicación completa en un puerto aleatorio contra un **PostgreSQL real que Testcontainers levanta en un contenedor Docker** (`postgres:17-alpine`). La base nace vacía en cada ejecución y Flyway corre todas las migraciones, por lo que no tocan la base local. `AuthControllerIT` (login válido → `200` con token; credenciales inválidas → `401`; registro repetido → `409`), `ListaControllerIT` (lista propia → `200`; ajena → `403`; sin token o con token inválido → `401`; `ADMIN` sobre lista ajena → `200`; inexistente → `404`; cada usuario ve solo sus listas) y `DemoApplicationIT` (la aplicación arranca y Flyway aplica todas las migraciones).
+
+Las pruebas de integración **necesitan Docker en ejecución** (Docker Desktop en Windows). Sin Docker fallan con `Could not find a valid Docker environment`. Los reportes quedan en `target/surefire-reports` (unitarias) y `target/failsafe-reports` (integración). Los avisos de Mockito sobre "self-attaching" y agentes dinámicos son esperables y no indican un problema.
+
+## Integración continua (CI)
+
+El workflow [`.github/workflows/ci.yml`](./.github/workflows/ci.yml) corre en cada `push` (y a mano desde la pestaña Actions): descarga el código, instala Java 25 (Temurin, con caché de Maven) y ejecuta `./mvnw -B -ntp verify`, o sea compila y corre las pruebas unitarias (Surefire) y las de integración (Failsafe). El runner de GitHub ya trae Docker, así que Testcontainers funciona sin configurar nada, y no hace falta una base preinstalada.
+
+**Cómo leer el resultado:**
+
+1. En el repositorio, pestaña **Actions**: cada ejecución muestra el mensaje del commit, la rama y su estado. Verde es éxito, rojo es fallo y amarillo es en curso. El mismo ícono aparece al lado de cada commit y en la insignia de arriba.
+2. Entrar a la ejecución, abrir el job **Compilar y probar** y expandir el paso **Compilar y correr las pruebas**.
+3. Si pasó, el log muestra el bloque de Surefire (`Tests run: 13, Failures: 0, Errors: 0` al momento de escribir esto), el de Failsafe (`Tests run: 12, ...`) y `BUILD SUCCESS`.
+4. Si falló, buscar la primera línea `[ERROR]`: nombra el test (por ejemplo `UsuarioServiceTest.registrar_...`) con el valor esperado y el obtenido, y termina en `BUILD FAILURE`. Si falla una prueba unitaria, Maven corta antes de las de integración, así que no aparece el bloque de Failsafe.
+5. Si el paso de Maven falla con `Permission denied`, el wrapper perdió el permiso de ejecución: `git update-index --chmod=+x mvnw` y subir el cambio.
+
+**Cómo comprobar que el CI detecta errores:** romper un test a propósito, hacer `push` y ver la ejecución en rojo; después `git revert --no-edit HEAD`, `push` y ver que vuelve a verde.
+
+## Despliegue en Render
+
+URL pública: https://<tu-servicio>.onrender.com (por ejemplo `https://<tu-servicio>.onrender.com/health`). Es una instancia gratuita: se duerme tras 15 minutos sin tráfico y la primera petición después tarda cerca de un minuto en responder.
+
+**Archivos que lo hacen posible.** Render no ejecuta Java directamente, así que se despliega con un `Dockerfile` de dos etapas (compila con `./mvnw package` en una imagen JDK 25 y ejecuta el jar en una imagen JRE 25, con un heap limitado a la memoria de la instancia gratuita). `server.port=${PORT:8080}` en `application.properties` hace que la app escuche en el puerto que Render le indica; en local sigue siendo 8080.
+
+**Pasos que se siguieron:**
+
+1. En Render, **New + → PostgreSQL**: plan **Free**, versión **17** (la misma de las pruebas), en una región elegida. Cuando figura **Available**, se copian los datos de la pestaña Info: **Hostname** interno (con la forma `dpg-xxxxxxxx-a`), Port, Database, Username y Password.
+2. **New + → Web Service**, conectando este repositorio, con **Language: Docker**, el mismo branch que se despliega, la **misma región que la base** (con otra región no resuelve el hostname interno) y plan **Free**.
+3. Variables de entorno del servicio (solo el valor, sin comillas ni texto de ejemplo):
+   - `DB_HOST`: el hostname interno de la base.
+   - `DB_PORT`: `5432`.
+   - `DB_NAME`, `DB_USER`, `DB_PASSWORD`: los datos de la base.
+   - `JWT_SECRET`: un secreto aleatorio de 48 bytes en base64, generado con PowerShell: `$b = New-Object byte[] 48; [System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($b); [Convert]::ToBase64String($b)`. No se guarda en el repositorio: si faltara, la app usaría el secreto de desarrollo, que es público.
+4. En **Advanced**, **Health Check Path** = `/health`, y **Create Web Service**. Cada `push` al branch redespliega solo.
+
+**Cómo se verificó:**
+
+- En **Logs** del servicio: `Successfully applied 6 migrations to schema "public", now at version v6` (las migraciones corrieron en la base remota), `Started DemoApplication` y ninguna línea `ERROR`. El estado del servicio pasa a **Live**.
+- `GET https://<tu-servicio>.onrender.com/health` responde `{"status":"ok","service":"demo"}`.
+- Registro y login contra la URL pública, `GET /api/listas` con el token → `200` y sin token → `401`.
+
+**Problema que apareció:** el primer despliegue falló con `UnknownHostException` porque `DB_HOST` quedó con un texto de ejemplo en vez del hostname real. Los errores de conexión a la base se ven en los logs justo antes de que Flyway intente migrar.
+
+**Limitaciones del plan gratuito:** la base expira a los 30 días de creada (hay un período de gracia de 14 días antes de que se borre) y solo se permite una base gratuita por cuenta. La instancia tiene 512 MB de RAM y 0,1 CPU, por eso el arranque es lento.
+
+## Evidencia del TP3
+
+Capturas en [`EVIDENCIA/tp3/`](./EVIDENCIA/tp3): pruebas unitarias y de integración en verde (`./mvnw verify`), CI en rojo con un test roto a propósito y de nuevo en verde, Swagger UI con el botón Authorize, y el despliegue en Render (servicio **Live**, variables de entorno con los secretos tapados, logs de Flyway y `/health` en la URL pública).
+
+## Limitaciones conocidas
+
+- La propiedad de los recursos (`403` si no es tuyo) se valida en las listas, que es lo que pide la consigna. **Favoritos** exige token pero no valida de quién es cada favorito: cualquier usuario autenticado puede verlos o modificarlos.
+- El JWT es stateless: no se puede revocar antes de que venza (60 minutos por defecto, configurable con `JWT_EXPIRATION_MINUTES`).
+- Un usuario `ADMIN` solo se crea cambiando el rol en la base.

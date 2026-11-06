@@ -13,7 +13,7 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/productos")
-@Tag(name = "Productos", description = "Catálogo de productos, consumido desde la API externa DummyJSON")
+@Tag(name = "Productos", description = "Catálogo de productos, consumido desde la API externa DummyJSON. Público: no requiere token.")
 public class ProductoController {
 
     private final ProductoService productoService;
