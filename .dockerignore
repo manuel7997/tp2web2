@@ -1,0 +1,9 @@
+target/
+.git/
+.github/
+.vscode/
+.idea/
+EVIDENCIA/
+requests/
+docs-utils/
+*.md

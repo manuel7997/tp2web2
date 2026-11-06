@@ -5,9 +5,10 @@ import com.example.demo.security.JwtService;
 import com.example.demo.security.RestAuthenticationEntryPoint;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
@@ -25,6 +26,18 @@ public class SecurityConfig {
     @Bean
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
+    }
+
+    /**
+     * Esta API autentica solo con JWT, no con el usuario en memoria que Spring Boot
+     * crea por defecto. Al declarar este bean vacío Spring Boot no genera esa
+     * contraseña de desarrollo (ni la imprime en los logs de producción).
+     */
+    @Bean
+    public UserDetailsService userDetailsService() {
+        return username -> {
+            throw new UsernameNotFoundException("La API autentica con JWT (POST /api/auth/login)");
+        };
     }
 
     @Bean
