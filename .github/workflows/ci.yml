@@ -1,0 +1,30 @@
+name: CI
+
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Compilar y probar
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Descargar el código
+        uses: actions/checkout@v6
+
+      - name: Instalar Java 25
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+
+      # verify = compilar + pruebas unitarias (*Test, Surefire) + pruebas de integración (*IT, Failsafe).
+      # Las *IT levantan PostgreSQL con Testcontainers (Docker ya viene instalado en ubuntu-latest) y
+      # Flyway corre las migraciones sobre esa base limpia: el runner no necesita ninguna base propia.
+      - name: Compilar y correr las pruebas
+        run: ./mvnw -B -ntp verify
