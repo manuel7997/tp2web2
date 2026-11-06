@@ -50,7 +50,7 @@ class UsuarioServiceTest {
         String hash = guardado.getValue().getPasswordHash();
         assertThat(hash).isNotEqualTo("clave12345");
         assertThat(hash).doesNotContain("clave12345");
-        assertThat(hash).startsWith("$9"); // formato BCrypt
+        assertThat(hash).startsWith("$2"); // formato BCrypt
         assertThat(passwordEncoder.matches("clave12345", hash)).isTrue();
     }
 
