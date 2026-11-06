@@ -216,3 +216,20 @@ Flyway) en [`EVIDENCIA/tp2/`](./EVIDENCIA/tp2). Las del TP1 siguen en
 - `spring-boot-starter-flyway` + `flyway-database-postgresql` — migraciones
   (en Spring Boot 4.x `flyway-core` solo no alcanza).
 - `springdoc-openapi-starter-webmvc-ui` — Swagger UI / OpenAPI.
+
+## Seguridad (TP3)
+
+La API usa JWT. `POST /api/auth/registro` y `POST /api/auth/login` son públicos y el login devuelve un token. `/api/productos/**` sigue público; `/api/favoritos/**` y `/api/listas/**` exigen `Authorization: Bearer <token>`, y sin token, con uno inválido o vencido responden `401`.
+
+### Dónde vive la regla de autorización
+
+Cada lista tiene un dueño (`listas.usuario_id`, migración `V6`). La regla "una lista solo la opera su dueño, salvo que el usuario sea `ADMIN`" vive en la **capa de servicio**, en un único método: `ListaService.obtenerAutorizada(id, usuario)`. Lo usan todas las operaciones sobre una lista puntual (obtener, favoritos de la lista, eliminar y mover favoritos, en este último caso para las dos listas). `listar` aplica la misma regla filtrando por dueño (o devolviendo todas si es `ADMIN`) y `crear` toma el dueño del usuario autenticado, nunca del body. `obtenerAutorizada` busca la lista (`404` si no existe) y recién después compara el dueño (`403` si no es suya ni es admin).
+
+Por qué ahí y no en otro lado:
+
+- **No en el controller.** El controller solo traduce HTTP a llamadas al servicio. Si la regla estuviera ahí habría que repetirla en cada endpoint, y cualquier otro camino que llame al servicio (otro controller, un job, un test) se la saltearía. En el servicio hay un solo lugar y no se puede esquivar.
+- **No en el filtro JWT.** El filtro corre antes de saber qué recurso se pide y solo conoce quién es el usuario (autenticación). Decidir si la lista 7 es suya exige consultar la base y entender la URL, o sea duplicar el ruteo y mezclar una regla de negocio con la infraestructura de seguridad. El filtro y `SecurityConfig` se quedan con lo que depende solo de la ruta y del token: qué es público y qué exige estar autenticado.
+- **No con anotaciones (`@PreAuthorize`).** Se podría, pero la regla quedaría escondida en una expresión de texto, más difícil de leer y de probar, y `mover-favoritos` necesita validar dos listas. Además el servicio tiene que cargar la lista de todos modos para distinguir `404` de `403`.
+- Al ser Java común, se prueba con tests unitarios sin levantar Spring: lista ajena lanza `AccesoDenegadoException` y `ADMIN` pasa.
+
+El servicio recibe el usuario autenticado como parámetro (el controller lo toma del contexto de seguridad con `@AuthenticationPrincipal`), así no depende de estado global. Responder `403` y no `404` ante una lista ajena distingue "no existe" de "no es tuya", con el costo de que confirma que el id existe.

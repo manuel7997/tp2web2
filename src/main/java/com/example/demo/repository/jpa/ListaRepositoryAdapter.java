@@ -14,14 +14,22 @@ import java.util.Optional;
 public class ListaRepositoryAdapter implements ListaRepository {
 
     private final ListaJpaRepository listaJpaRepository;
+    private final UsuarioJpaRepository usuarioJpaRepository;
 
-    public ListaRepositoryAdapter(ListaJpaRepository listaJpaRepository) {
+    public ListaRepositoryAdapter(ListaJpaRepository listaJpaRepository,
+                                  UsuarioJpaRepository usuarioJpaRepository) {
         this.listaJpaRepository = listaJpaRepository;
+        this.usuarioJpaRepository = usuarioJpaRepository;
     }
 
     @Override
     public List<Lista> buscarTodas() {
         return listaJpaRepository.findAll().stream().map(this::aDominio).toList();
+    }
+
+    @Override
+    public List<Lista> buscarPorUsuarioId(Long usuarioId) {
+        return listaJpaRepository.findByUsuarioId(usuarioId).stream().map(this::aDominio).toList();
     }
 
     @Override
@@ -37,7 +45,11 @@ public class ListaRepositoryAdapter implements ListaRepository {
     @Override
     @Transactional
     public Lista guardar(Lista lista) {
-        ListaEntity guardada = listaJpaRepository.save(new ListaEntity(lista.getId(), lista.getNombre()));
+        // Referencia por id, sin consultar al usuario: el id sale del token ya validado.
+        ListaEntity guardada = listaJpaRepository.save(new ListaEntity(
+                lista.getId(),
+                lista.getNombre(),
+                usuarioJpaRepository.getReferenceById(lista.getUsuarioId())));
         return aDominio(guardada);
     }
 
@@ -48,6 +60,6 @@ public class ListaRepositoryAdapter implements ListaRepository {
     }
 
     private Lista aDominio(ListaEntity e) {
-        return new Lista(e.getId(), e.getNombre());
+        return new Lista(e.getId(), e.getNombre(), e.getUsuario().getId());
     }
 }
